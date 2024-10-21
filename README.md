@@ -4,6 +4,10 @@ Network Packet Inspector is a Go-based tool for capturing and analyzing network 
 
 *Note: This tool is only supported on Linux.*
 
+## Dataflow Diagram
+
+![Dataflow](/docs/images/network-packet-inspector-using-syscall.png)
+
 ## Features
 
 - Capture packets from specified network interfaces
