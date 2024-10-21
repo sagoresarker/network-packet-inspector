@@ -17,7 +17,6 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	interfaceName := flag.String("interface", "", "Network interface to capture packets from")
-	outputFile := flag.String("output", "", "File to save the output (optional)")
 	listInterfaces := flag.Bool("list", false, "List available network interfaces")
 	flag.Parse()
 
@@ -45,15 +44,6 @@ func main() {
 
 	analyzer := analyzer.NewAnalyzer()
 
-	var output *os.File
-	if *outputFile != "" {
-		output, err = os.Create(*outputFile)
-		if err != nil {
-			log.Fatalf("Failed to create output file: %v", err)
-		}
-		defer output.Close()
-	}
-
 	fmt.Printf("Starting packet capture on interface %s...\n", *interfaceName)
 
 	sigChan := make(chan os.Signal, 1)
@@ -68,13 +58,6 @@ func main() {
 
 	for packet := range capturer.Capture() {
 		analyzedPacket := analyzer.Analyze(packet)
-		if output != nil {
-			_, err := fmt.Fprintln(output, analyzedPacket)
-			if err != nil {
-				log.Printf("Error writing to output file: %v", err)
-			}
-		} else {
-			fmt.Println(analyzedPacket)
-		}
+		fmt.Println(analyzedPacket)
 	}
 }

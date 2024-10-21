@@ -3,12 +3,10 @@ package models
 import (
 	"fmt"
 	"time"
-
-	"github.com/google/gopacket"
 )
 
 type RawPacket struct {
-	Packet gopacket.Packet
+	Data []byte
 }
 
 type AnalyzedPacket struct {

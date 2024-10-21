@@ -1,43 +1,65 @@
 package capture
 
 import (
+	"encoding/binary"
 	"fmt"
-	"log"
+	"net"
+	"syscall"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/pcap"
 	"github.com/sagoresarker/network-packet-inspector/internal/models"
 )
 
 type Capturer struct {
-	handle *pcap.Handle
-	done   chan struct{}
+	fd   int
+	done chan struct{}
 }
 
+// const (
+// 	AF_PACKET = 17     // Define AF_PACKET manually
+// 	ETH_P_ALL = 0x0003 // Define ETH_P_ALL manually
+// )
+
 func NewCapturer(interfaceName string) (*Capturer, error) {
-	handle, err := pcap.OpenLive(interfaceName, 65535, true, pcap.BlockForever)
+	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, int(htons(syscall.ETH_P_ALL)))
 	if err != nil {
-		return nil, fmt.Errorf("failed to open interface %s: %v", interfaceName, err)
+		return nil, fmt.Errorf("failed to create socket: %v", err)
 	}
-	return &Capturer{handle: handle, done: make(chan struct{})}, nil
+
+	iface, err := net.InterfaceByName(interfaceName)
+	if err != nil {
+		syscall.Close(fd)
+		return nil, fmt.Errorf("failed to get interface: %v", err)
+	}
+
+	addr := syscall.SockaddrLinklayer{
+		Protocol: htons(syscall.ETH_P_ALL),
+		Ifindex:  iface.Index,
+	}
+
+	if err := syscall.Bind(fd, &addr); err != nil {
+		syscall.Close(fd)
+		return nil, fmt.Errorf("failed to bind to interface: %v", err)
+	}
+
+	return &Capturer{fd: fd, done: make(chan struct{})}, nil
 }
 
 func (c *Capturer) Capture() <-chan models.RawPacket {
 	packetChan := make(chan models.RawPacket)
 	go func() {
 		defer close(packetChan)
-		packetSource := gopacket.NewPacketSource(c.handle, c.handle.LinkType())
 		for {
 			select {
 			case <-c.done:
 				return
 			default:
-				packet, err := packetSource.NextPacket()
+				buf := make([]byte, 65536)
+				n, _, err := syscall.Recvfrom(c.fd, buf, 0)
 				if err != nil {
-					log.Printf("Error capturing packet: %v", err)
+					fmt.Printf("Error receiving packet: %v\n", err)
 					continue
 				}
-				packetChan <- models.RawPacket{Packet: packet}
+				packetChan <- models.RawPacket{Data: buf[:n]}
 			}
 		}
 	}()
@@ -46,5 +68,9 @@ func (c *Capturer) Capture() <-chan models.RawPacket {
 
 func (c *Capturer) Close() {
 	close(c.done)
-	c.handle.Close()
+	syscall.Close(c.fd)
+}
+
+func htons(host uint16) uint16 {
+	return binary.BigEndian.Uint16(binary.LittleEndian.AppendUint16(nil, host))
 }
